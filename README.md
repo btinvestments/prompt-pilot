@@ -1,3 +1,7 @@
+# PromptPilot
+
+PromptPilot is an AI prompt engineering tool that helps users create, improve, and optimize prompts for various AI models. It provides model recommendations based on the prompt's purpose and offers a seamless interface for interacting with different AI models via OpenRouter.
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
@@ -28,6 +32,34 @@ To learn more about Next.js, take a look at the following resources:
 - [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Features
+
+- AI-powered prompt generation and improvement
+- Model recommendation based on prompt purpose
+- Integration with OpenRouter for access to multiple AI models
+- User authentication via Clerk
+- Persistent storage with Supabase
+- Modern UI with Tailwind CSS and shadcn/ui
+
+## Environment Setup
+
+Create a `.env.local` file in the root directory with the following variables:
+
+```
+# Authentication - Clerk
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
+CLERK_SECRET_KEY=sk_...
+
+# Database - Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# OpenRouter API
+OPENROUTER_API_KEY=sk_...
+NEXT_PUBLIC_OPENROUTER_SITE_URL=https://promptpilot.vercel.app
+```
 
 ## Deploy on Vercel
 
