@@ -80,6 +80,8 @@ export default function NewPromptPage() {
   async function onGenerateSubmit(values: GenerateFormValues) {
     setIsSubmitting(true);
     try {
+      console.log('Submitting generate prompt request with values:', values);
+      
       const response = await fetch("/api/prompt/generate", {
         method: "POST",
         headers: {
@@ -88,12 +90,38 @@ export default function NewPromptPage() {
         body: JSON.stringify(values),
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries([...response.headers.entries()]));
+      
+      // Clone the response so we can log it and still use it
+      const responseClone = response.clone();
+      const responseText = await responseClone.text();
+      console.log('Raw response body:', responseText);
+      
+      // Try to parse as JSON
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        console.log('Parsed response data:', data);
+      } catch (parseError) {
+        console.error('Error parsing response as JSON:', parseError);
+        throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}...`);
+      }
+      
       if (!response.ok) {
-        throw new Error("Failed to generate prompt");
+        // Extract error information from the response data
+        const errorMessage = data.details || data.error || "Failed to generate prompt";
+        console.error("API error:", data);
+        throw new Error(errorMessage);
       }
 
-      const data = await response.json();
+      if (!data.prompt) {
+        console.error('Response missing prompt field:', data);
+        throw new Error("No prompt was generated. Please try again.");
+      }
+      
       setGeneratedPrompt(data.prompt);
+      console.log('Generated prompt set successfully:', data.prompt);
       
       // Get model recommendation
       await getModelRecommendation(data.prompt);
@@ -101,7 +129,8 @@ export default function NewPromptPage() {
       toast.success("Prompt generated successfully!");
     } catch (error) {
       console.error("Error generating prompt:", error);
-      toast.error("Failed to generate prompt. Please try again.");
+      const errorMessage = error instanceof Error ? error.message : "Failed to generate prompt. Please try again.";
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }

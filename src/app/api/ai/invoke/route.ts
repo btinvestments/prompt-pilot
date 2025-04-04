@@ -38,10 +38,18 @@ export async function POST(req: NextRequest) {
 
     const { model, prompt, max_tokens, temperature, top_p, stream } = validationResult.data;
 
+    // Format the prompt as a message for the OpenAI API
+    const messages = [
+      {
+        role: 'user' as const,
+        content: prompt
+      }
+    ];
+
     // Call OpenRouter API to generate completion
     const completion = await generateCompletion({
       model,
-      prompt,
+      prompt: messages,
       max_tokens,
       temperature,
       top_p,

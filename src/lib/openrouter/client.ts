@@ -33,9 +33,14 @@ export type ModelRecommendationRequest = {
   category?: ModelCategory;
 };
 
+export type Message = {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+};
+
 export type OpenRouterCompletionRequest = {
   model: string;
-  prompt: string | string[];
+  prompt: string | string[] | Message[];
   max_tokens?: number;
   temperature?: number;
   top_p?: number;
@@ -74,6 +79,11 @@ const openRouterClient = axios.create({
 // Get available models from OpenRouter
 export async function getAvailableModels(): Promise<OpenRouterModel[]> {
   try {
+    // Check if we have an API key
+    if (!process.env.OPENROUTER_API_KEY) {
+      throw new Error('OpenRouter API key is required but not found in environment variables');
+    }
+    
     const response = await openRouterClient.get('/models');
     return response.data.data;
   } catch (error) {
@@ -82,16 +92,35 @@ export async function getAvailableModels(): Promise<OpenRouterModel[]> {
   }
 }
 
+
+
 // Generate completion using OpenRouter
 export async function generateCompletion(
   request: OpenRouterCompletionRequest
 ): Promise<OpenRouterCompletionResponse> {
   try {
+    // Check if we have an API key
+    if (!process.env.OPENROUTER_API_KEY) {
+      throw new Error('OpenRouter API key is required but not found in environment variables');
+    }
+    
+    // Format the prompt as an array of messages if it's a string
+    let messages;
+    if (typeof request.prompt === 'string') {
+      messages = [
+        { role: 'user', content: request.prompt }
+      ];
+    } else if (Array.isArray(request.prompt) && request.prompt.length > 0 && typeof request.prompt[0] === 'string') {
+      // If it's an array of strings, convert each to a message
+      messages = request.prompt.map(content => ({ role: 'user', content }));
+    } else {
+      // If it's already in message format, use it directly
+      messages = request.prompt as Message[];
+    }
+
     const response = await openRouterClient.post('/chat/completions', {
       model: request.model,
-      messages: [
-        { role: 'user', content: request.prompt }
-      ],
+      messages,
       max_tokens: request.max_tokens || 1024,
       temperature: request.temperature || 0.7,
       top_p: request.top_p || 1,

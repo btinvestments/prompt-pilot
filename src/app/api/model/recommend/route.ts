@@ -49,25 +49,32 @@ export async function POST(req: NextRequest) {
     }
 
     // Otherwise, analyze the prompt to determine the best category
-    const systemPrompt = `
-    You are an AI model classifier. Analyze the following prompt and classify it into one of these categories:
-    - chat: General conversation, Q&A, or simple interactions
-    - code: Programming, code generation, debugging, or technical explanations
-    - reasoning: Complex problem-solving, logical analysis, or deep reasoning
-    - writing: Content creation, creative writing, or document drafting
-    - multimodal: Tasks involving images, audio, or other non-text media
-    
-    Prompt to classify:
-    "${prompt}"
-    
-    Respond with ONLY the category name and a confidence score between 0 and 1, separated by a comma.
-    Example: "code,0.85"
-    `;
+    const messages = [
+      {
+        role: 'system' as const,
+        content: 'You are an AI model classifier. Your task is to analyze prompts and classify them into categories. Respond with ONLY the category name and a confidence score between 0 and 1, separated by a comma. Example: "code,0.85"'
+      },
+      {
+        role: 'user' as const,
+        content: `Analyze the following prompt and classify it into one of these categories:
+- chat: General conversation, Q&A, or simple interactions
+- code: Programming, code generation, debugging, or technical explanations
+- reasoning: Complex problem-solving, logical analysis, or deep reasoning
+- writing: Content creation, creative writing, or document drafting
+- multimodal: Tasks involving images, audio, or other non-text media
+
+Prompt to classify:
+"${prompt}"
+
+Respond with ONLY the category name and a confidence score between 0 and 1, separated by a comma.
+Example: "code,0.85"`
+      }
+    ];
 
     // Call OpenRouter API to classify the prompt
     const completion = await generateCompletion({
       model: 'openai/gpt-3.5-turbo',
-      prompt: systemPrompt,
+      prompt: messages,
       max_tokens: 20,
       temperature: 0.3,
     });

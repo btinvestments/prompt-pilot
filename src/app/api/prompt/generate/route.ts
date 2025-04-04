@@ -34,27 +34,34 @@ export async function POST(req: NextRequest) {
 
     const { goal, context } = validationResult.data;
 
-    // Construct the system prompt for generating a good AI prompt
-    const systemPrompt = `
-    You are an expert prompt engineer. Your task is to create an effective prompt based on the user's goal.
-    
-    Consider the following when crafting the prompt:
-    1. Be specific and clear about what you want the AI to do
-    2. Provide necessary context and constraints
-    3. Structure the prompt logically
-    4. Use appropriate tone and style for the intended purpose
-    5. Include any relevant examples if needed
-    
-    User's goal: ${goal}
-    ${context ? `Additional context: ${context}` : ''}
-    
-    Create a well-crafted prompt that will achieve this goal effectively.
-    `;
+    // Create a structured message array for the OpenAI API
+    const messages = [
+      {
+        role: 'system' as const,
+        content: 'You are an expert prompt engineer. Your task is to create an effective prompt based on the user\'s goal. Your response should ONLY include the prompt text, with no additional explanations or commentary.'
+      },
+      {
+        role: 'user' as const,
+        content: `I need help crafting an effective AI prompt for the following goal:
+
+Goal: ${goal}
+${context ? `\nAdditional context: ${context}` : ''}
+
+Consider the following when crafting the prompt:
+1. Be specific and clear about what you want the AI to do
+2. Provide necessary context and constraints
+3. Structure the prompt logically
+4. Use appropriate tone and style for the intended purpose
+5. Include any relevant examples if needed
+
+Please create a well-crafted prompt that will achieve this goal effectively.`
+      }
+    ];
 
     // Call OpenRouter API to generate the prompt
     const completion = await generateCompletion({
       model: 'openai/gpt-4o',
-      prompt: systemPrompt,
+      prompt: messages,
       max_tokens: 1024,
       temperature: 0.7,
     });
@@ -104,8 +111,16 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('Error generating prompt:', error);
+    // Provide more detailed error information
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : '';
+    
     return NextResponse.json(
-      { error: 'Failed to generate prompt' },
+      { 
+        error: 'Failed to generate prompt', 
+        details: errorMessage,
+        stack: process.env.NODE_ENV === 'development' ? errorStack : undefined
+      },
       { status: 500 }
     );
   }

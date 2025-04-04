@@ -34,29 +34,35 @@ export async function POST(req: NextRequest) {
 
     const { prompt, feedback } = validationResult.data;
 
-    // Construct the system prompt for improving the user's prompt
-    const systemPrompt = `
-    You are an expert prompt engineer. Your task is to improve the following prompt to make it more effective.
-    
-    Original prompt:
-    "${prompt}"
-    
-    ${feedback ? `User feedback on what to improve: ${feedback}` : ''}
-    
-    Please analyze the prompt and improve it by:
-    1. Making it more specific and clear
-    2. Adding necessary context or constraints
-    3. Improving the structure and flow
-    4. Adjusting the tone and style for the intended purpose
-    5. Adding examples or clarifications if needed
-    
-    Provide only the improved prompt without explanations or commentary.
-    `;
+    // Create a structured message array for the OpenAI API
+    const messages = [
+      {
+        role: 'system' as const,
+        content: 'You are an expert prompt engineer. Your task is to improve prompts to make them more effective. Your response should ONLY include the improved prompt text, with no additional explanations or commentary.'
+      },
+      {
+        role: 'user' as const,
+        content: `I need help improving the following prompt to make it more effective:
+
+Original prompt:
+"${prompt}"
+
+${feedback ? `User feedback on what to improve: ${feedback}\n\n` : ''}
+Please analyze the prompt and improve it by:
+1. Making it more specific and clear
+2. Adding necessary context or constraints
+3. Improving the structure and flow
+4. Adjusting the tone and style for the intended purpose
+5. Adding examples or clarifications if needed
+
+Provide only the improved prompt without explanations or commentary.`
+      }
+    ];
 
     // Call OpenRouter API to improve the prompt
     const completion = await generateCompletion({
       model: 'anthropic/claude-3-sonnet',
-      prompt: systemPrompt,
+      prompt: messages,
       max_tokens: 1024,
       temperature: 0.7,
     });
