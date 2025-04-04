@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
     ];
 
     // Call OpenRouter API to generate completion
+    // We keep using OpenRouter here as this is where we want to use multiple models
     const completion = await generateCompletion({
       model,
       prompt: messages,

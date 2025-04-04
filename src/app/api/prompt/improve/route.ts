@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth } from '@clerk/nextjs/server';
-import { generateCompletion } from '@/lib/openrouter/client';
+import { generateCompletion } from '@/lib/openai/client';
 import { incrementUserUsage, savePrompt } from '@/lib/supabase/client';
 import { z } from 'zod';
 
@@ -59,10 +59,10 @@ Provide only the improved prompt without explanations or commentary.`
       }
     ];
 
-    // Call OpenRouter API to improve the prompt
+    // Call OpenAI API to improve the prompt
     const completion = await generateCompletion({
-      model: 'anthropic/claude-3-sonnet',
-      prompt: messages,
+      model: 'gpt-4o',
+      messages,
       max_tokens: 1024,
       temperature: 0.7,
     });
@@ -96,7 +96,7 @@ Provide only the improved prompt without explanations or commentary.`
       original_text: prompt,
       improved_text: improvedPrompt,
       category,
-      model_used: 'anthropic/claude-3-sonnet',
+      model_used: 'gpt-4o',
       tokens: completion.usage.total_tokens,
       quality_score: 0, // Will be updated if user rates the prompt
     });

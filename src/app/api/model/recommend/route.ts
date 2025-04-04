@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth } from '@clerk/nextjs/server';
-import { generateCompletion, getModelRecommendation } from '@/lib/openrouter/client';
+import { generateCompletion } from '@/lib/openai/client';
+import { getModelRecommendation } from '@/lib/openrouter/client';
 import { incrementUserUsage } from '@/lib/supabase/client';
 import { z } from 'zod';
 
@@ -71,10 +72,10 @@ Example: "code,0.85"`
       }
     ];
 
-    // Call OpenRouter API to classify the prompt
+    // Call OpenAI API to classify the prompt
     const completion = await generateCompletion({
-      model: 'openai/gpt-3.5-turbo',
-      prompt: messages,
+      model: 'gpt-3.5-turbo',
+      messages,
       max_tokens: 20,
       temperature: 0.3,
     });

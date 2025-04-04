@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth } from '@clerk/nextjs/server';
-import { generateCompletion } from '@/lib/openrouter/client';
+import { generateCompletion } from '@/lib/openai/client';
 import { incrementUserUsage, savePrompt } from '@/lib/supabase/client';
 import { z } from 'zod';
 
@@ -58,10 +58,10 @@ Please create a well-crafted prompt that will achieve this goal effectively.`
       }
     ];
 
-    // Call OpenRouter API to generate the prompt
+    // Call OpenAI API to generate the prompt
     const completion = await generateCompletion({
-      model: 'openai/gpt-4o',
-      prompt: messages,
+      model: 'gpt-4o',
+      messages,
       max_tokens: 1024,
       temperature: 0.7,
     });
@@ -95,7 +95,7 @@ Please create a well-crafted prompt that will achieve this goal effectively.`
       original_text: goal,
       improved_text: generatedPrompt,
       category,
-      model_used: 'openai/gpt-4o',
+      model_used: 'gpt-4o',
       tokens: completion.usage.total_tokens,
       quality_score: 0, // Will be updated if user rates the prompt
     });
