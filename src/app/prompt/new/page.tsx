@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { toast } from "sonner";
+import { useAuth, SignedIn, SignedOut, RedirectToSignIn } from "@clerk/nextjs";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -48,7 +49,8 @@ const improveFormSchema = z.object({
 type GenerateFormValues = z.infer<typeof generateFormSchema>;
 type ImproveFormValues = z.infer<typeof improveFormSchema>;
 
-export default function NewPromptPage() {
+// The actual content of the New Prompt page
+function NewPromptContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const mode = searchParams.get("mode") || "generate";
@@ -76,9 +78,15 @@ export default function NewPromptPage() {
     },
   });
 
+  // State for tracking email confirmation issues
+  const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false);
+  const [emailForResend, setEmailForResend] = useState("");
+  
   // Handle generate prompt submission
   async function onGenerateSubmit(values: GenerateFormValues) {
     setIsSubmitting(true);
+    setNeedsEmailConfirmation(false); // Reset email confirmation state
+    
     try {
       console.log('Submitting generate prompt request with values:', values);
       
@@ -88,30 +96,54 @@ export default function NewPromptPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(values),
+        credentials: "include", // Include cookies and authentication credentials
       });
 
       console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries([...response.headers.entries()]));
       
-      // Clone the response so we can log it and still use it
-      const responseClone = response.clone();
-      const responseText = await responseClone.text();
-      console.log('Raw response body:', responseText);
+      // Handle authentication errors specifically
+      if (response.status === 401) {
+        console.error('Authentication error: User is not authenticated');
+        toast.error('You must be signed in to generate prompts');
+        router.push('/sign-in?redirect=/prompt/new');
+        setIsSubmitting(false);
+        return;
+      }
       
       // Try to parse as JSON
       let data;
       try {
-        data = JSON.parse(responseText);
-        console.log('Parsed response data:', data);
+        data = await response.json();
       } catch (parseError) {
         console.error('Error parsing response as JSON:', parseError);
-        throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}...`);
+        throw new Error(`Invalid JSON response`);
       }
       
       if (!response.ok) {
         // Extract error information from the response data
         const errorMessage = data.details || data.error || "Failed to generate prompt";
         console.error("API error:", data);
+        
+        // Check for email confirmation errors
+        if (data.code === "email_not_confirmed" || 
+            (errorMessage && errorMessage.toLowerCase().includes('email') && 
+             errorMessage.toLowerCase().includes('confirm'))) {
+          console.log('Email not confirmed error detected');
+          setNeedsEmailConfirmation(true);
+          setEmailForResend(data.email || "");
+          toast.error('Please confirm your email address to continue');
+          return;
+        }
+        
+        // Check if this is an auth-related error
+        if (errorMessage.toLowerCase().includes('unauthorized') || 
+            errorMessage.toLowerCase().includes('authentication') || 
+            errorMessage.toLowerCase().includes('sign in')) {
+          toast.error('Authentication error: Please sign in again');
+          router.push('/sign-in?redirect=/prompt/new');
+          return;
+        }
+        
         throw new Error(errorMessage);
       }
 
@@ -127,6 +159,9 @@ export default function NewPromptPage() {
       await getModelRecommendation(data.prompt);
       
       toast.success("Prompt generated successfully!");
+      
+      // Reset email confirmation state if successful
+      setNeedsEmailConfirmation(false);
     } catch (error) {
       console.error("Error generating prompt:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to generate prompt. Please try again.";
@@ -221,9 +256,64 @@ export default function NewPromptPage() {
     }
   }
 
+  // Handle resend confirmation email
+  async function handleResendConfirmation() {
+    if (!emailForResend) {
+      toast.error("No email address available for resending confirmation");
+      return;
+    }
+    
+    try {
+      const response = await fetch("/api/auth/resend-confirmation", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: emailForResend }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to resend confirmation email");
+      }
+      
+      toast.success("Confirmation email sent! Please check your inbox.");
+    } catch (error) {
+      console.error("Error resending confirmation email:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to resend confirmation email");
+    }
+  }
+  
   return (
     <div className="container py-8">
       <h1 className="text-3xl font-bold mb-6">Create New Prompt</h1>
+      
+      {needsEmailConfirmation && (
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-yellow-700">
+                Your email address needs to be confirmed before you can generate prompts.
+              </p>
+              <div className="mt-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleResendConfirmation}
+                >
+                  Resend Confirmation Email
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       <Tabs defaultValue={mode} className="w-full">
         <TabsList className="mb-4">
@@ -332,9 +422,12 @@ export default function NewPromptPage() {
                     navigator.clipboard.writeText(generatedPrompt);
                     toast.success("Prompt copied to clipboard!");
                   }}>
-                    Copy to Clipboard
+                    Copy Prompt
                   </Button>
-                  <Button onClick={() => improveForm.setValue("prompt", generatedPrompt)}>
+                  <Button variant="outline" onClick={() => {
+                    improveForm.setValue("prompt", generatedPrompt);
+                    router.push("/prompt/new?mode=improve");
+                  }}>
                     Improve This Prompt
                   </Button>
                 </CardFooter>
@@ -349,7 +442,7 @@ export default function NewPromptPage() {
               <CardHeader>
                 <CardTitle>Improve a Prompt</CardTitle>
                 <CardDescription>
-                  Paste your existing prompt and we'll help you improve it.
+                  Paste an existing prompt and we'll help you make it better.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -360,7 +453,7 @@ export default function NewPromptPage() {
                       name="prompt"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Your Prompt</FormLabel>
+                          <FormLabel>Existing Prompt</FormLabel>
                           <FormControl>
                             <Textarea
                               placeholder="Paste your existing prompt here..."
@@ -369,7 +462,7 @@ export default function NewPromptPage() {
                             />
                           </FormControl>
                           <FormDescription>
-                            The prompt you want to improve.
+                            This is the prompt you want to improve.
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -383,13 +476,13 @@ export default function NewPromptPage() {
                           <FormLabel>Improvement Feedback (Optional)</FormLabel>
                           <FormControl>
                             <Textarea
-                              placeholder="What aspects would you like to improve?"
+                              placeholder="What specific aspects would you like to improve?"
                               className="min-h-[80px]"
                               {...field}
                             />
                           </FormControl>
                           <FormDescription>
-                            Specify what you'd like to improve about the prompt.
+                            Let us know what issues you're having with the current prompt.
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -408,7 +501,7 @@ export default function NewPromptPage() {
                 <CardHeader>
                   <CardTitle>Improved Prompt</CardTitle>
                   <CardDescription>
-                    Here's your improved prompt.
+                    Here's your improved prompt with enhanced effectiveness.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -440,10 +533,13 @@ export default function NewPromptPage() {
                     navigator.clipboard.writeText(improvedPrompt);
                     toast.success("Prompt copied to clipboard!");
                   }}>
-                    Copy to Clipboard
+                    Copy Prompt
                   </Button>
-                  <Button onClick={() => improveForm.setValue("prompt", improvedPrompt)}>
-                    Improve Again
+                  <Button variant="outline" onClick={() => {
+                    improveForm.setValue("prompt", improvedPrompt);
+                    toast.success("Prompt set for further improvement!");
+                  }}>
+                    Improve Further
                   </Button>
                 </CardFooter>
               </Card>
@@ -452,5 +548,35 @@ export default function NewPromptPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// Main component that handles authentication
+export default function NewPromptPage() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const router = useRouter();
+  
+  // Show loading state while Clerk is initializing
+  if (!isLoaded) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-lg">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Use Clerk's built-in components to handle authentication
+  return (
+    <>
+      <SignedIn>
+        <NewPromptContent />
+      </SignedIn>
+      <SignedOut>
+        <RedirectToSignIn redirectUrl="/prompt/new" />
+      </SignedOut>
+    </>
   );
 }

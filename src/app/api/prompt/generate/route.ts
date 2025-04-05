@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth } from '@clerk/nextjs/server';
 import { generateCompletion } from '@/lib/openai/client';
-import { incrementUserUsage, savePrompt } from '@/lib/supabase/client';
+import { savePrompt, incrementUserUsage } from '@/lib/supabase/client';
 import { z } from 'zod';
+import axios from 'axios';
 
 // Input validation schema
 const generatePromptSchema = z.object({
@@ -13,10 +14,28 @@ const generatePromptSchema = z.object({
 export async function POST(req: NextRequest) {
   try {
     // Check authentication
-    const { userId } = getAuth(req);
+    console.log('Checking authentication...');
+    const auth = getAuth(req);
+    const { userId } = auth;
+    
+    console.log('Auth status:', { 
+      userId: userId || 'not authenticated',
+      isAuthenticated: !!userId,
+      headers: Object.fromEntries([...req.headers.entries()].filter(([key]) => 
+        key.toLowerCase().includes('auth') || 
+        key.toLowerCase().includes('cookie') || 
+        key.toLowerCase().includes('clerk')
+      ))
+    });
+    
     if (!userId) {
+      console.error('Authentication failed: No userId found in request');
       return NextResponse.json(
-        { error: 'Unauthorized' },
+        { 
+          error: 'Unauthorized', 
+          message: 'You must be signed in to use this API',
+          authDebug: 'No userId found in request'
+        },
         { status: 401 }
       );
     }
@@ -89,7 +108,7 @@ Please create a well-crafted prompt that will achieve this goal effectively.`
       category = 'multimodal';
     }
 
-    // Log the interaction to the database
+    // Log the interaction to the database using Supabase
     await savePrompt({
       user_id: userId,
       original_text: goal,
@@ -111,17 +130,52 @@ Please create a well-crafted prompt that will achieve this goal effectively.`
     });
   } catch (error) {
     console.error('Error generating prompt:', error);
+    
     // Provide more detailed error information
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorStack = error instanceof Error ? error.stack : '';
+    let errorMessage = 'Failed to generate prompt';
+    let errorDetails = '';
+    let statusCode = 500;
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      errorDetails = error.stack || '';
+      
+      // Check for specific error types
+      if (errorMessage.includes('API key')) {
+        statusCode = 401;
+        errorMessage = 'OpenAI API key is invalid or missing';
+      } else if (errorMessage.includes('auth') || errorMessage.includes('token') || errorMessage.includes('clerk')) {
+        statusCode = 401;
+        errorMessage = 'Authentication error: ' + errorMessage;
+        console.error('Authentication error details:', error);
+      } else if (axios.isAxiosError(error) && error.response) {
+        // Handle Axios errors
+        errorDetails = JSON.stringify({
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data,
+          headers: error.response.headers,
+        }, null, 2);
+        
+        if (error.response.status === 401) {
+          statusCode = 401;
+          errorMessage = 'Authentication failed with OpenAI API';
+        } else if (error.response.status === 429) {
+          statusCode = 429;
+          errorMessage = 'Rate limit exceeded with OpenAI API';
+        }
+      }
+    }
+    
+    console.error('Detailed error:', { errorMessage, errorDetails, statusCode });
     
     return NextResponse.json(
       { 
-        error: 'Failed to generate prompt', 
-        details: errorMessage,
-        stack: process.env.NODE_ENV === 'development' ? errorStack : undefined
+        error: errorMessage, 
+        details: errorDetails,
+        status: statusCode
       },
-      { status: 500 }
+      { status: statusCode }
     );
   }
 }

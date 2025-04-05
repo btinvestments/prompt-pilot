@@ -1,0 +1,78 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// User model linked to Clerk authentication
+model User {
+  id            String    @id @default(cuid())
+  clerkId       String    @unique
+  email         String    @unique
+  name          String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  prompts       Prompt[]
+  generatedContent GeneratedContent[]
+}
+
+// Prompt model for storing user-created prompts
+model Prompt {
+  id            String    @id @default(cuid())
+  title         String
+  content       String    @db.Text
+  goal          String    @db.Text
+  context       String?   @db.Text
+  isPublic      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generatedContent GeneratedContent[]
+  tags          PromptTag[]
+
+  @@index([userId])
+}
+
+// Generated content from prompts
+model GeneratedContent {
+  id            String    @id @default(cuid())
+  content       String    @db.Text
+  model         String    // AI model used
+  promptId      String
+  prompt        Prompt    @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  metadata      Json?     // Additional metadata about the generation
+
+  @@index([promptId])
+  @@index([userId])
+}
+
+// Tags for categorizing prompts
+model Tag {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  prompts       PromptTag[]
+  createdAt     DateTime  @default(now())
+}
+
+// Many-to-many relationship between prompts and tags
+model PromptTag {
+  promptId      String
+  prompt        Prompt    @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  tagId         String
+  tag           Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  assignedAt    DateTime  @default(now())
+
+  @@id([promptId, tagId])
+  @@index([promptId])
+  @@index([tagId])
+}
